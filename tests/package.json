@@ -1,0 +1,28 @@
+{
+  "name": "@banking/tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run tests/unit",
+    "test:api": "vitest run tests/api",
+    "test:integration": "vitest run tests/integration",
+    "test:concurrent": "vitest run tests/concurrency",
+    "test:security": "vitest run tests/security",
+    "test:e2e": "playwright test tests/e2e",
+    "test:load": "k6 run tests/load/transfer.js",
+    "test:all": "vitest run"
+  },
+  "dependencies": {
+    "@banking/contracts": "*"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0",
+    "@playwright/test": "^1.45.0",
+    "node-fetch": "^3.3.2",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5",
+    "uuid": "^10.0.0",
+    "@types/uuid": "^10.0.0"
+  }
+}

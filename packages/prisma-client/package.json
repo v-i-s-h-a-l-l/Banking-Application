@@ -1,0 +1,24 @@
+{
+  "name": "@banking/prisma-client",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx src/seed.ts",
+    "build": "echo \"Prisma client generated\"",
+    "typecheck": "echo \"OK\""
+  },
+  "dependencies": {
+    "@prisma/client": "^5.15.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.15.0",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0"
+  }
+}

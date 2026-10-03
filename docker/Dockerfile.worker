@@ -1,0 +1,28 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache openssl
+
+FROM base AS builder
+COPY package.json package-lock.json* ./
+COPY packages/ ./packages/
+COPY workers/ ./workers/
+COPY prisma/ ./prisma/
+COPY tsconfig.base.json ./
+
+ARG WORKER
+RUN npm install
+RUN npx prisma@5.22.0 generate
+RUN npm run build --workspace=packages/logger --if-present
+RUN npm run build --workspace=packages/contracts --if-present
+RUN npm run build --workspace=workers/${WORKER} --if-present
+
+FROM base AS runner
+ARG WORKER
+ENV WORKER=${WORKER}
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/workers/${WORKER} ./workers/${WORKER}
+COPY --from=builder /app/node_modules ./node_modules
+
+WORKDIR /app/workers/${WORKER}
+CMD ["node", "dist/index.js"]

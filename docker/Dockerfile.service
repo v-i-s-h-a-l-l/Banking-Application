@@ -1,0 +1,30 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache wget openssl
+
+FROM base AS builder
+COPY package.json package-lock.json* ./
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+COPY prisma/ ./prisma/
+COPY tsconfig.base.json ./
+
+ARG SERVICE
+RUN npm install
+RUN npx prisma@5.22.0 generate
+RUN npm run build --workspace=packages/logger --if-present
+RUN npm run build --workspace=packages/errors --if-present
+RUN npm run build --workspace=packages/contracts --if-present
+RUN npm run build --workspace=apps/${SERVICE} --if-present
+
+FROM base AS runner
+ARG SERVICE
+ENV SERVICE=${SERVICE}
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/${SERVICE} ./apps/${SERVICE}
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
+
+WORKDIR /app/apps/${SERVICE}
+CMD ["node", "dist/index.js"]

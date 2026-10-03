@@ -1,0 +1,253 @@
+// Prisma schema for Banking Platform
+// All monetary values use INTEGER MINOR UNITS (paise for INR)
+// Schema separation: auth, accounts, transfers, audit
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth", "accounts", "transfers", "audit"]
+}
+
+// ============================================================
+// AUTH SCHEMA
+// ============================================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sessions      Session[]
+  loginAttempts LoginAttempt[]
+  accounts      Account[]
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  refreshToken String    @unique @map("refresh_token")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  revokedAt    DateTime? @map("revoked_at")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+  @@schema("auth")
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  success   Boolean
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_attempts")
+  @@schema("auth")
+}
+
+// ============================================================
+// ACCOUNTS SCHEMA
+// ============================================================
+
+model Account {
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  accountNumber String        @unique @map("account_number")
+  accountType   AccountType   @default(SAVINGS) @map("account_type")
+  status        AccountStatus @default(ACTIVE)
+  balanceMinor  BigInt        @default(0) @map("balance_minor") // Integer minor units (paise)
+  currency      String        @default("INR")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  user          User          @relation(fields: [userId], references: [id])
+  ledgerEntries LedgerEntry[]
+
+  @@index([userId])
+  @@index([accountNumber])
+  @@map("accounts")
+  @@schema("accounts")
+}
+
+// Ledger entries are IMMUTABLE — never update, never delete
+model LedgerEntry {
+  id           String          @id @default(uuid())
+  accountId    String          @map("account_id")
+  entryType    LedgerEntryType @map("entry_type")
+  amountMinor  BigInt          @map("amount_minor") // Always positive
+  balanceAfter BigInt          @map("balance_after") // Balance after this entry
+  transferId   String?         @map("transfer_id") // Reference to transfer (nullable for deposits)
+  description  String
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([transferId])
+  @@index([createdAt])
+  @@map("ledger_entries")
+  @@schema("accounts")
+}
+
+enum AccountType {
+  SAVINGS
+  CURRENT
+
+  @@map("account_type")
+  @@schema("accounts")
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+
+  @@map("account_status")
+  @@schema("accounts")
+}
+
+enum LedgerEntryType {
+  CREDIT
+  DEBIT
+
+  @@map("ledger_entry_type")
+  @@schema("accounts")
+}
+
+// ============================================================
+// TRANSFERS SCHEMA
+// ============================================================
+
+model Transfer {
+  id                   String         @id @default(uuid())
+  sourceAccountId      String         @map("source_account_id")
+  destinationAccountId String         @map("destination_account_id")
+  amountMinor          BigInt         @map("amount_minor") // Integer minor units
+  currency             String         @default("INR")
+  description          String
+  status               TransferStatus @default(CREATED)
+  idempotencyKey       String         @map("idempotency_key")
+  initiatedByUserId    String         @map("initiated_by_user_id")
+  correlationId        String         @map("correlation_id")
+  failureReason        String?        @map("failure_reason")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  completedAt          DateTime?      @map("completed_at")
+
+  events       TransferEvent[]
+  outboxEvents OutboxEvent[]
+
+  @@unique([initiatedByUserId, idempotencyKey])
+  @@index([sourceAccountId])
+  @@index([destinationAccountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transfers")
+  @@schema("transfers")
+}
+
+// Immutable state transition log
+model TransferEvent {
+  id         String          @id @default(uuid())
+  transferId String          @map("transfer_id")
+  fromStatus TransferStatus? @map("from_status")
+  toStatus   TransferStatus  @map("to_status")
+  metadata   Json?
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  transfer Transfer @relation(fields: [transferId], references: [id])
+
+  @@index([transferId])
+  @@map("transfer_events")
+  @@schema("transfers")
+}
+
+// Transactional Outbox
+model OutboxEvent {
+  id            String    @id @default(uuid())
+  eventType     String    @map("event_type")
+  aggregateId   String    @map("aggregate_id") // transferId
+  correlationId String    @map("correlation_id")
+  payload       Json
+  publishedAt   DateTime? @map("published_at")
+  failedAt      DateTime? @map("failed_at")
+  attempts      Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  transferId String   @map("transfer_id")
+  transfer   Transfer @relation(fields: [transferId], references: [id])
+
+  @@index([publishedAt, attempts])
+  @@index([transferId])
+  @@map("outbox_events")
+  @@schema("transfers")
+}
+
+enum TransferStatus {
+  CREATED
+  PROCESSING
+  DEBITED
+  CREDITED
+  COMPLETED
+  FAILED
+
+  @@map("transfer_status")
+  @@schema("transfers")
+}
+
+// ============================================================
+// AUDIT SCHEMA
+// ============================================================
+
+model AuditRecord {
+  id            String   @id @default(uuid())
+  eventId       String   @unique @map("event_id") // idempotency for duplicate messages
+  eventType     String   @map("event_type")
+  aggregateId   String   @map("aggregate_id")
+  correlationId String   @map("correlation_id")
+  payload       Json
+  processedAt   DateTime @default(now()) @map("processed_at")
+
+  @@index([aggregateId])
+  @@index([eventType])
+  @@map("audit_records")
+  @@schema("audit")
+}
+
+// Notification delivery log (idempotent by eventId)
+model NotificationRecord {
+  id          String   @id @default(uuid())
+  eventId     String   @unique @map("event_id")
+  eventType   String   @map("event_type")
+  aggregateId String   @map("aggregate_id")
+  recipientId String   @map("recipient_id") // userId
+  message     String
+  deliveredAt DateTime @default(now()) @map("delivered_at")
+
+  @@index([recipientId])
+  @@map("notification_records")
+  @@schema("audit")
+}

@@ -1,0 +1,238 @@
+services:
+  # ============================================================
+  # Infrastructure
+  # ============================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: banking-postgres
+    environment:
+      POSTGRES_USER: banking
+      POSTGRES_PASSWORD: banking_secret
+      POSTGRES_DB: banking_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banking -d banking_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: banking-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass banking_secret
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "banking_secret", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: banking-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: banking
+      RABBITMQ_DEFAULT_PASS: banking_secret
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # ============================================================
+  # DB Migration (runs once)
+  # ============================================================
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.migrate
+    environment:
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ============================================================
+  # Backend Services
+  # ============================================================
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: auth-service
+    container_name: banking-auth
+    environment:
+      NODE_ENV: production
+      AUTH_SERVICE_PORT: 3001
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      REDIS_URL: redis://:banking_secret@redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  account-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: account-service
+    container_name: banking-account
+    environment:
+      NODE_ENV: production
+      ACCOUNT_SERVICE_PORT: 3002
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:-internal-secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      FAIL_ACCOUNT_SERVICE: ${FAIL_ACCOUNT_SERVICE:-false}
+      ARTIFICIAL_LATENCY_MS: ${ARTIFICIAL_LATENCY_MS:-0}
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  transfer-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: transfer-service
+    container_name: banking-transfer
+    environment:
+      NODE_ENV: production
+      TRANSFER_SERVICE_PORT: 3003
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      ACCOUNT_SERVICE_URL: http://account-service:3002
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:-internal-secret}
+      RABBITMQ_URL: amqp://banking:banking_secret@rabbitmq:5672
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      FAIL_TRANSFER_SERVICE: ${FAIL_TRANSFER_SERVICE:-false}
+      FAIL_RABBITMQ: ${FAIL_RABBITMQ:-false}
+      ARTIFICIAL_LATENCY_MS: ${ARTIFICIAL_LATENCY_MS:-0}
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      account-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: api-gateway
+    container_name: banking-gateway
+    environment:
+      NODE_ENV: production
+      API_GATEWAY_PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3001
+      ACCOUNT_SERVICE_URL: http://account-service:3002
+      TRANSFER_SERVICE_URL: http://transfer-service:3003
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "3000:3000"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+      transfer-service:
+        condition: service_healthy
+
+  # ============================================================
+  # Workers
+  # ============================================================
+
+  notification-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+      args:
+        WORKER: notification-worker
+    container_name: banking-notification
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+      RABBITMQ_URL: amqp://banking:banking_secret@rabbitmq:5672
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  audit-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+      args:
+        WORKER: audit-worker
+    container_name: banking-audit
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://banking:banking_secret@postgres:5432/banking_platform
+      RABBITMQ_URL: amqp://banking:banking_secret@rabbitmq:5672
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: banking-network
