@@ -19,7 +19,16 @@ from generate_report_helpers import (
     add_heading_3,
     add_paragraph,
     add_code_block,
+    add_figure,
 )
+
+FIG_DIR = r"c:\Banking-platform\report_figures"
+FIG1 = os.path.join(FIG_DIR, "fig1_system_architecture.png")
+FIG2 = os.path.join(FIG_DIR, "fig2_transfer_sequence_flow.png")
+FIG3 = os.path.join(FIG_DIR, "fig3_state_machine.png")
+FIG4 = os.path.join(FIG_DIR, "fig4_transactional_outbox.png")
+FIG5 = os.path.join(FIG_DIR, "fig5_performance_benchmarks.png")
+FIG6 = os.path.join(FIG_DIR, "fig6_dashboard_ui.jpg")
 
 def build_full_report():
     doc = Document()
@@ -249,6 +258,8 @@ def build_full_report():
     add_paragraph(doc, "5. Asynchronous Messaging Tier: RabbitMQ 3.13 Topic Exchange ('banking.events') fed by a dedicated Transactional Outbox Worker daemon.", "• ")
     add_paragraph(doc, "6. Asynchronous Worker Tier: Background consumer daemons (Notification Worker, Audit Worker) processing events idempotently.", "• ")
 
+    add_figure(doc, FIG1, "Figure 4.1", "Enterprise Distributed Banking System Topology: Presentation SPA, Edge Gateway, Microservices, PostgreSQL 16 Multi-Schema, Transactional Outbox, RabbitMQ, and Asynchronous Worker Daemons.", width_inches=6.2)
+
     add_heading_2(doc, "4.2 Microservices & Bounded Contexts")
     add_paragraph(doc, "Each service maintains strict boundary isolation, adhering to Domain-Driven Design (DDD) principles:")
 
@@ -284,6 +295,8 @@ def build_full_report():
 
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
+    add_figure(doc, FIG2, "Figure 4.2", "End-to-End Distributed Money Transfer Protocol Execution: Sequential Ingress, Concurrency Row-Locking, Ledger Commit, Outbox Event Staging, and Asynchronous Worker Delivery.", width_inches=6.2)
+
     add_heading_2(doc, "4.3 Multi-Schema Relational Database Architecture")
     add_paragraph(doc, "To achieve domain isolation without incurring the operational complexity and distributed transaction overhead of maintaining separate database clusters per service, the system employs PostgreSQL 16 Multi-Schema separation within a single database instance ('banking_platform'):")
     add_paragraph(doc, "• Schema 'auth': Tables users, sessions, login_attempts. Governs authentication security, token expiry, and IP lockout tracking.", "1. ")
@@ -318,6 +331,8 @@ await prisma.$transaction(async (tx) => {
 
     add_paragraph(doc, "An asynchronous background poller polls the outbox table every 2,000 milliseconds for unpublished records using row locks ('FOR UPDATE SKIP LOCKED'), publishes the message to the RabbitMQ topic exchange, and updates 'published_at = NOW()'. This guarantees at-least-once delivery with zero phantom events and zero lost messages even in the event of sudden server crashes.")
 
+    add_figure(doc, FIG4, "Figure 5.1", "Comparative Architectural Analysis: The Flawed Dual-Write Inconsistency Dilemma vs. The Resilient Transactional Outbox Pattern.", width_inches=6.2)
+
     add_heading_2(doc, "5.2 Idempotency Keys & Deduplication Strategies")
     add_paragraph(doc, "In distributed networks, packet drops and client timeouts frequently induce retries. If a client attempts to retry a transfer because a network timeout occurred after the server processed the debit, a duplicate transfer could occur. The platform enforces idempotency at two critical boundaries:")
     add_paragraph(doc, "1. Ingress Idempotency: Every POST /api/transfers request mandates an 'Idempotency-Key' HTTP header containing a client-generated UUIDv4. The database enforces a compound unique constraint: UNIQUE (initiated_by_user_id, idempotency_key). If an identical key is received from the same user, the system recognizes the retry and returns the existing transfer record without re-executing debits.")
@@ -340,6 +355,8 @@ const accounts = await tx.$queryRaw`
 
     add_heading_2(doc, "5.4 Deterministic Finite State Machine Lifecycle")
     add_paragraph(doc, "Fund transfers follow a strict unidirectional state machine: CREATED -> PROCESSING -> DEBITED -> CREDITED -> COMPLETED. If any step fails (e.g., insufficient funds during debit), the transfer immediately transitions to FAILED. Terminal states (COMPLETED and FAILED) are strictly immutable. Illegal backwards transitions (such as attempting to move from DEBITED back to PROCESSING) throw validation errors at both the domain model and database layer.")
+
+    add_figure(doc, FIG3, "Figure 5.2", "Transfer Finite State Machine Transition Graph with Unidirectional Invariant Guards and Terminal States.", width_inches=6.0)
 
     add_heading_2(doc, "5.5 Distributed Request Tracing & Correlation Identifiers")
     add_paragraph(doc, "Every incoming HTTP request is assigned a unique UUIDv4 Correlation ID ('x-correlation-id') at the API Gateway. This identifier is injected into internal microservice HTTP headers, persisted into database event records, bundled into RabbitMQ message payloads, and stamped into all structured Pino JSON log lines. This enables end-to-end request tracing across all distributed boundaries.")
@@ -409,6 +426,8 @@ const accounts = await tx.$queryRaw`
     add_paragraph(doc, "5. Settlement & Outbox Dispatch: The Transfer Service completes the debit and credit, commits 'COMPLETED', and stages the outbox event. The outbox worker polls the table, dispatches 'transfer.completed' to RabbitMQ, and marks it published.", "• ")
     add_paragraph(doc, "6. Asynchronous Workers: The Audit Worker receives the event and writes an immutable record into 'audit.audit_records'. The Notification Worker generates a simulated customer alert in 'audit.notification_records'.", "• ")
     add_paragraph(doc, "7. Ledger Statement Verification: The client refreshes the statement view; the ledger displays an immutable 'DEBIT' entry of 50,000 paise with the new running balance reflected in real-time.", "• ")
+
+    add_figure(doc, FIG6, "Figure 8.1", "Operational Banking Dashboard & Transfer Workbench Interface: Sovereign Account Balances, Real-Time Status Polling, and Immutable Ledger Statement.", width_inches=6.2)
 
     # -------------------------------------------------------------
     # SECTION 9: TESTING & EXPERIMENTAL RESULTS
@@ -497,6 +516,8 @@ const accounts = await tx.$queryRaw`
             set_cell_margins(cell, 50, 50, 70, 70)
 
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
+
+    add_figure(doc, FIG5, "Figure 9.1", "Empirical Performance & Load Benchmarks (k6 Load Test: Throughput Curve under 50 Virtual Users & Response Time Latency Distribution vs SLA Targets).", width_inches=6.2)
 
     # -------------------------------------------------------------
     # SECTION 10: INDIVIDUAL CONTRIBUTION

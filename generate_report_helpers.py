@@ -146,4 +146,27 @@ def add_code_block(doc, code_text):
     run.font.color.rgb = RGBColor(36, 41, 47)
     doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
+def add_figure(doc, image_path, caption_title, caption_text, width_inches=6.2):
+    if not os.path.exists(image_path):
+        print(f"Warning: image path does not exist: {image_path}")
+        return
+    p_img = doc.add_paragraph()
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_img.paragraph_format.space_before = Pt(10)
+    p_img.paragraph_format.space_after = Pt(4)
+    run_img = p_img.add_run()
+    run_img.add_picture(image_path, width=Inches(width_inches))
+
+    p_cap = doc.add_paragraph()
+    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cap.paragraph_format.space_before = Pt(2)
+    p_cap.paragraph_format.space_after = Pt(12)
+    p_cap.paragraph_format.line_spacing = 1.15
+    
+    r_title = p_cap.add_run(caption_title + ": ")
+    format_run(r_title, "Calibri", 9.5, bold=True, color_rgb=(27, 54, 93))
+    
+    r_desc = p_cap.add_run(caption_text)
+    format_run(r_desc, "Calibri", 9.5, italic=True, color_rgb=(75, 85, 99))
+
 print("Helper functions defined successfully.")
