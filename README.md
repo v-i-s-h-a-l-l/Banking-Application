@@ -35,56 +35,56 @@ Built using an asynchronous **Microservices Architecture** on Node.js and TypeSc
 ```mermaid
 flowchart TD
     subgraph Client["Presentation Tier"]
-        UI["React 18 SPA (Vite + TypeScript)\nPort: 5173"]
+        UI["React 18 SPA (Vite + TypeScript) - Port 5173"]
     end
 
-    subgraph Edge["Gateway & Edge Tier"]
-        GW["API Gateway (Fastify)\nPort: 3000\n• JWT Auth Validation\n• Rate Limiting (Redis)\n• Correlation ID Tracing\n• Routing & Proxying"]
+    subgraph Edge["Gateway and Edge Tier"]
+        GW["API Gateway (Fastify) - Port 3000<br/>JWT Auth, Rate Limiting, Correlation ID"]
     end
 
     subgraph Services["Core Microservices Tier"]
-        AUTH["Auth Service\nPort: 3001\n• User Lifecycle\n• Sessions & Tokens\n• Lockout Protection"]
-        ACC["Account Service\nPort: 3002\n• Balance Management\n• Row Locking\n• Immutable Ledger"]
-        TX["Transfer Service\nPort: 3003\n• State Machine\n• Outbox Persistence\n• Transfer Coordination"]
+        AUTH["Auth Service - Port 3001<br/>User Lifecycle, Sessions, Lockout"]
+        ACC["Account Service - Port 3002<br/>Balance Management, Row Locking, Ledger"]
+        TX["Transfer Service - Port 3003<br/>State Machine, Outbox Persistence"]
     end
 
-    subgraph Data["Persistence Tier (PostgreSQL 16)"]
-        DB[("PostgreSQL Multi-Schema\nDB: banking_platform")]
-        S_AUTH[("schema: auth\nusers, sessions, login_attempts")]
-        S_ACC[("schema: accounts\naccounts, ledger_entries")]
-        S_TX[("schema: transfers\ntransfers, transfer_events, outbox_events")]
-        S_AUD[("schema: audit\naudit_records, notification_records")]
+    subgraph Data["Persistence Tier - PostgreSQL 16"]
+        DB[("PostgreSQL Multi-Schema Database")]
+        S_AUTH[("schema: auth")]
+        S_ACC[("schema: accounts")]
+        S_TX[("schema: transfers")]
+        S_AUD[("schema: audit")]
         DB --- S_AUTH
         DB --- S_ACC
         DB --- S_TX
         DB --- S_AUD
     end
 
-    subgraph Messaging["Message Broker & Event Streaming"]
-        RMQ{{"RabbitMQ 3.13\nExchange: banking.events (Topic)"}}
-        OB_WORKER["Transactional Outbox Worker\n(Polls outbox_events table)"]
+    subgraph Messaging["Message Broker and Event Streaming"]
+        RMQ["RabbitMQ 3.13 Topic Exchange: banking.events"]
+        OB_WORKER["Transactional Outbox Worker"]
     end
 
     subgraph AsyncWorkers["Background Worker Tier"]
-        NOTIF["Notification Worker\n• Idempotent Deduplication\n• Customer Alert Dispatch"]
-        AUDIT["Audit Worker\n• Tamper-Evident Ledger\n• Compliance Event Store"]
+        NOTIF["Notification Worker<br/>Idempotent Deduplication, Alerts"]
+        AUDIT["Audit Worker<br/>Tamper-Evident Ledger, Compliance"]
     end
 
-    UI -->|HTTP / REST| GW
-    GW -->|/api/auth/*| AUTH
-    GW -->|/api/accounts/*| ACC
-    GW -->|/api/transfers/*| TX
+    UI -->|HTTP REST| GW
+    GW -->|Auth API| AUTH
+    GW -->|Accounts API| ACC
+    GW -->|Transfers API| TX
 
     AUTH -->|Prisma Client| S_AUTH
-    ACC -->|Prisma Client (Row-Locks)| S_ACC
-    TX -->|HTTP Internal Service Call| ACC
-    TX -->|Prisma Client (Tx Commit)| S_TX
+    ACC -->|Prisma Client with Row Locks| S_ACC
+    TX -->|Internal Service HTTP| ACC
+    TX -->|Prisma Client Transaction| S_TX
 
     S_TX -.->|Polled every 2s| OB_WORKER
     OB_WORKER -->|Publish Events| RMQ
 
-    RMQ -->|transfer.*| NOTIF
-    RMQ -->|# (All Events)| AUDIT
+    RMQ -->|Transfer Events| NOTIF
+    RMQ -->|All Domain Events| AUDIT
 
     NOTIF -->|Write Log| S_AUD
     AUDIT -->|Write Audit Record| S_AUD
@@ -99,45 +99,45 @@ The sequence diagram below demonstrates an asynchronous, idempotent fund transfe
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Client / UI
-    participant GW as API Gateway (:3000)
-    participant TX as Transfer Service (:3003)
-    participant ACC as Account Service (:3002)
-    participant DB as PostgreSQL (Schemas)
+    actor User as Client UI
+    participant GW as API Gateway (3000)
+    participant TX as Transfer Service (3003)
+    participant ACC as Account Service (3002)
+    participant DB as PostgreSQL DB
     participant OB as Outbox Worker
     participant RMQ as RabbitMQ
-    participant W as Workers (Audit / Notif)
+    participant W as Async Workers
 
     User->>GW: POST /api/transfers (Idempotency-Key: UUID)
-    Note over User,GW: Amount in paise (e.g. 100000 = ₹1,000.00)
-    GW->>GW: Validate JWT & Rate Limit
-    GW->>TX: Proxy request with x-correlation-id & user-id
+    Note over User,GW: Amount in paise minor units (e.g. 100000 = INR 1,000.00)
+    GW->>GW: Validate JWT and Rate Limit
+    GW->>TX: Proxy request with correlation-id and user-id
 
-    TX->>DB: Check idempotency (user_id, idempotency_key)
-    TX->>DB: INSERT Transfer (status: CREATED) + TransferEvent
+    TX->>DB: Check idempotency (user_id and idempotency_key)
+    TX->>DB: INSERT Transfer (status: CREATED) and TransferEvent
     TX->>ACC: POST /internal/accounts/debit (source, amount)
-    Note over ACC,DB: BEGIN TX; SELECT FOR UPDATE (source);<br/>Check Balance >= Amount; UPDATE balance;<br/>INSERT Immutable LedgerEntry; COMMIT;
+    Note over ACC,DB: Atomic TX: SELECT FOR UPDATE on source account, verify balance, insert immutable ledger entry
     ACC-->>TX: Debit Confirmed (balance_after)
 
-    TX->>DB: UPDATE Transfer status = DEBITED + TransferEvent
+    TX->>DB: UPDATE Transfer status = DEBITED and TransferEvent
     TX->>ACC: POST /internal/accounts/credit (dest, amount)
-    Note over ACC,DB: BEGIN TX; SELECT FOR UPDATE (dest);<br/>UPDATE balance;<br/>INSERT Immutable LedgerEntry; COMMIT;
+    Note over ACC,DB: Atomic TX: SELECT FOR UPDATE on dest account, apply credit, insert immutable ledger entry
     ACC-->>TX: Credit Confirmed (balance_after)
 
-    TX->>DB: BEGIN TX;<br/>UPDATE Transfer status = COMPLETED;<br/>INSERT outbox_events (transfer.completed);<br/>COMMIT;
+    TX->>DB: Atomic TX: UPDATE Transfer status = COMPLETED and INSERT outbox_events
     TX-->>GW: HTTP 202 Accepted (status: PROCESSING / COMPLETED)
     GW-->>User: HTTP 202 Transfer Accepted (transferId)
 
     loop Asynchronous Outbox Publisher
-        OB->>DB: SELECT * FROM outbox_events WHERE published_at IS NULL FOR UPDATE SKIP LOCKED
-        OB->>RMQ: Publish to topic exchange 'banking.events'
+        OB->>DB: SELECT outbox_events WHERE published_at IS NULL
+        OB->>RMQ: Publish to topic exchange banking.events
         OB->>DB: UPDATE outbox_events SET published_at = NOW()
     end
 
     par Event Consumers
-        RMQ->>W: Deliver 'transfer.completed'
-        W->>DB: Check event_id uniqueness (Idempotency)
-        W->>DB: INSERT audit_records & notification_records
+        RMQ->>W: Deliver transfer.completed
+        W->>DB: Check event_id uniqueness for idempotency
+        W->>DB: INSERT audit_records and notification_records
     end
 
     User->>GW: GET /api/transfers/:id (Poll status)
@@ -154,16 +154,16 @@ Transfers follow a strict unidirectional state machine. Backward transitions or 
 ```mermaid
 stateDiagram-v2
     [*] --> CREATED: Transfer Request Initiated
-    CREATED --> PROCESSING: Pre-flight Validations Passed
-    PROCESSING --> DEBITED: Source Account Debited (Row Lock)
-    DEBITED --> CREDITED: Destination Account Credited (Row Lock)
+    CREATED --> PROCESSING: Validations Passed
+    PROCESSING --> DEBITED: Source Debited with Row Lock
+    DEBITED --> CREDITED: Destination Credited with Row Lock
     CREDITED --> COMPLETED: Outbox Event Staged
     COMPLETED --> [*]: Terminal Success State
 
-    CREATED --> FAILED: Validation Error / Account Suspended
+    CREATED --> FAILED: Validation Error or Suspended
     PROCESSING --> FAILED: Insufficient Funds
-    DEBITED --> FAILED: System Failure (Triggers Reversal)
-    CREDITED --> FAILED: Credit Failure (Triggers Compensation)
+    DEBITED --> FAILED: System Failure Reversal
+    CREDITED --> FAILED: Credit Failure Compensation
     FAILED --> [*]: Terminal Failure State
 ```
 
