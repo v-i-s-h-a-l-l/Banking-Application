@@ -70,14 +70,18 @@ async function start() {
     process.exit(1);
   }
 
-  // Start outbox worker
-  startOutboxWorker();
+  if (process.env.DATABASE_URL) {
+    // Start outbox worker
+    startOutboxWorker();
 
-  // Run recovery on startup, then every 5 minutes
-  recoverStuckTransfers().catch((err) => logger.error({ err }, 'Initial recovery failed'));
-  setInterval(() => {
-    recoverStuckTransfers().catch((err) => logger.error({ err }, 'Recovery failed'));
-  }, 5 * 60 * 1000);
+    // Run recovery on startup, then every 5 minutes
+    recoverStuckTransfers().catch((err) => logger.warn({ err: err?.message || err }, 'Initial recovery deferred'));
+    setInterval(() => {
+      recoverStuckTransfers().catch((err) => logger.warn({ err: err?.message || err }, 'Recovery deferred'));
+    }, 5 * 60 * 1000);
+  } else {
+    logger.warn('DATABASE_URL is not set. Outbox worker is paused.');
+  }
 
   const shutdown = async () => {
     logger.info('Shutting down transfer service...');

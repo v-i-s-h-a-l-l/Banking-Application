@@ -53,7 +53,9 @@ async function getChannel(): Promise<amqplib.Channel> {
  * Retryable: failed publishes increment attempt counter.
  */
 async function processOutbox(): Promise<void> {
-  const prisma = getPrisma();
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const prisma = getPrisma();
 
   const events = await prisma.outboxEvent.findMany({
     where: {
@@ -102,6 +104,9 @@ async function processOutbox(): Promise<void> {
       channel = null;
     }
   }
+} catch (err: any) {
+  logger.warn({ err: err?.message || err }, 'Outbox processing paused');
+}
 }
 
 let pollTimer: NodeJS.Timeout | null = null;
