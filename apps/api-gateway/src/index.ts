@@ -28,9 +28,10 @@ try {
 
 const logger = createLogger('api-gateway');
 
-const PORT = Number(process.env.API_GATEWAY_PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? process.env.API_GATEWAY_PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-to-a-strong-random-secret-min-32-chars';
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const RAW_CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const ALLOWED_ORIGINS = RAW_CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
 
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const ACCOUNT_SERVICE_URL = process.env.ACCOUNT_SERVICE_URL ?? 'http://127.0.0.1:3002';
@@ -49,7 +50,19 @@ async function buildApp() {
   const app = Fastify({ logger: false, genReqId: () => crypto.randomUUID() });
 
   await app.register(helmet, { global: true });
-  await app.register(cors, { origin: CORS_ORIGIN, credentials: true });
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (RAW_CORS_ORIGIN === '*' || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
+        return cb(null, true);
+      }
+      if (/\.vercel\.app$/.test(origin)) {
+        return cb(null, true);
+      }
+      return cb(new Error('Not allowed by CORS'), false);
+    },
+    credentials: true,
+  });
   await app.register(rateLimit, {
     max: Number(process.env.RATE_LIMIT_MAX ?? 100),
     timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60000),

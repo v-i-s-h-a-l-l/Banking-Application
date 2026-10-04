@@ -7,6 +7,7 @@ import {
   ConflictError,
   UnauthorizedError,
   NotFoundError,
+  ValidationError,
 } from '@banking/errors';
 import { createLogger } from '@banking/logger';
 import type { RegisterInput, LoginInput } from './validators.js';
@@ -210,4 +211,23 @@ export async function getUserById(userId: string): Promise<UserProfile> {
 
   if (!user) throw new NotFoundError('User');
   return user;
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const prisma = getPrisma();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User');
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) throw new ValidationError('Current password is incorrect', {});
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+  logger.info({ userId }, 'Password changed');
 }

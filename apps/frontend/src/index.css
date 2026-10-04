@@ -723,3 +723,71 @@ body {
 .justify-between { justify-content: space-between; }
 .flex-1 { flex: 1; }
 .w-full { width: 100%; }
+
+/* ── New Page Additions ─────────────────────────────────────── */
+
+/* 3-column grid */
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* Recharts: inherit font */
+.recharts-wrapper,
+.recharts-layer {
+  font-family: 'Inter', sans-serif;
+}
+.recharts-tooltip-wrapper { outline: none; }
+
+/* Notification unread dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.notif-unread-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Modal overlay with blur */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+/* Password strength bars */
+.password-strength-bar {
+  height: 3px;
+  border-radius: 2px;
+  flex: 1;
+  transition: background 0.2s;
+}
+
+/* Settings toggle row */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.settings-row:last-child { border-bottom: none; }
+
+/* Recharts spin keyframe (refresh button) */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -5,9 +5,9 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
+    "db:generate": "prisma generate --schema=../../prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema=../../prisma/schema.prisma",
+    "db:migrate:dev": "prisma migrate dev --schema=../../prisma/schema.prisma",
     "db:seed": "tsx src/seed.ts",
     "build": "echo \"Prisma client generated\"",
     "typecheck": "echo \"OK\""

@@ -12,6 +12,7 @@ import {
   rotateSession,
   revokeSession,
   getUserById,
+  changePassword,
 } from './service.js';
 import { ValidationError, toHttpError } from '@banking/errors';
 import { createLogger } from '@banking/logger';
@@ -124,6 +125,26 @@ export async function authRoutes(app: FastifyInstance) {
       const { sub } = req.user as { sub: string };
       const user = await getUserById(sub);
       reply.send({ success: true, data: { user } });
+    },
+  );
+
+  // PUT /auth/password  — change password for authenticated user
+  app.put(
+    '/auth/password',
+    { preHandler: [async (req: FastifyRequest) => { await req.jwtVerify(); }] },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { sub } = req.user as { sub: string };
+      const { currentPassword, newPassword } = req.body as {
+        currentPassword: string;
+        newPassword: string;
+      };
+
+      if (!currentPassword || !newPassword || newPassword.length < 8) {
+        throw new ValidationError('currentPassword and newPassword (min 8 chars) are required', {});
+      }
+
+      await changePassword(sub, currentPassword, newPassword);
+      reply.send({ success: true });
     },
   );
 

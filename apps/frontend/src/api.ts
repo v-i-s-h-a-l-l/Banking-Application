@@ -1,6 +1,9 @@
 // API client with auth token management
 
-const BASE_URL = '/api';
+const API_HOST = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
+  ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
+  : '';
+const BASE_URL = API_HOST ? `${API_HOST}/api` : '/api';
 
 interface ApiOptions extends RequestInit {
   skipAuth?: boolean;
@@ -135,6 +138,12 @@ export const authApi = {
     }),
 
   me: () => request<any>('/auth/me'),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<any>('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 };
 
 // ── Account API ─────────────────────────────────────────────

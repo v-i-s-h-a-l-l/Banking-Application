@@ -1,128 +1,149 @@
-# Deployment Guide
+# 🚀 Deployment Guide: Frontend (Vercel) + Backend (Render)
 
-## Local Development
-
-```bash
-# 1. Copy environment variables
-cp .env.example .env
-
-# 2. Start all infrastructure + services
-docker-compose up --build
-
-# 3. Frontend (separate terminal)
-cd apps/frontend
-npm install
-npm run dev
-```
-
-Services available at:
-- Frontend: http://localhost:5173
-- API Gateway: http://localhost:3000
-- RabbitMQ UI: http://localhost:15672 (banking/banking_secret)
+This platform is configured for zero-friction cloud deployment:
+- **Frontend SPA**: [Vercel](https://vercel.com/)
+- **Backend API & Database**: [Render](https://render.com/)
 
 ---
 
-## Production: Fly.io
+## 🌐 1. Deploy Frontend to Vercel
 
-### Prerequisites
-```bash
-# Install flyctl
-curl -L https://fly.io/install.sh | sh
-fly auth login
-```
+The frontend is a Vite + React 18 Single-Page Application located in `apps/frontend`.
 
-### PostgreSQL
-```bash
-fly postgres create --name banking-postgres --region bom
-fly postgres db create --app banking-postgres --name banking_platform
-```
+### Option A: Via Vercel Web Dashboard (Recommended)
 
-### RabbitMQ (via Docker on Fly.io)
-```bash
-fly apps create banking-rabbitmq
-fly secrets set RABBITMQ_DEFAULT_USER=banking RABBITMQ_DEFAULT_PASS=<strong-password> --app banking-rabbitmq
-```
+1. **Log in** to your [Vercel Dashboard](https://vercel.com/dashboard) and click **"Add New..."** $\rightarrow$ **"Project"**.
+2. **Import** your GitHub repository (`Banking-Application`).
+3. In the project configuration modal:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: Click `Edit` and select `apps/frontend`
+   - **Build Command**: `npm run build` (or leave default `vite build`)
+   - **Output Directory**: `dist`
+   - **Install Command**: `npm install`
+4. In **Environment Variables**, add:
+   ```env
+   VITE_API_URL = https://your-backend-service.onrender.com
+   ```
+   *(Note: Set this to your Render API Gateway URL after deploying the backend below)*
+5. Click **"Deploy"**.
 
-### Deploy each service
+### Option B: Via Vercel CLI
 
-```bash
-# Auth Service
-cd apps/auth-service
-fly apps create banking-auth-service
-fly secrets set DATABASE_URL="<postgres-url>" JWT_SECRET="<secret>" --app banking-auth-service
-fly deploy --dockerfile ../../docker/Dockerfile.service --build-arg SERVICE=auth-service
-
-# Account Service
-cd apps/account-service
-fly apps create banking-account-service
-fly secrets set DATABASE_URL="<postgres-url>" JWT_SECRET="<secret>" INTERNAL_SERVICE_SECRET="<secret>" --app banking-account-service
-fly deploy --dockerfile ../../docker/Dockerfile.service --build-arg SERVICE=account-service
-
-# Transfer Service
-cd apps/transfer-service
-fly apps create banking-transfer-service
-fly secrets set DATABASE_URL="<postgres-url>" JWT_SECRET="<secret>" ACCOUNT_SERVICE_URL="https://banking-account-service.fly.dev" RABBITMQ_URL="amqp://..." INTERNAL_SERVICE_SECRET="<secret>" --app banking-transfer-service
-fly deploy --dockerfile ../../docker/Dockerfile.service --build-arg SERVICE=transfer-service
-
-# API Gateway
-cd apps/api-gateway
-fly apps create banking-api-gateway
-fly secrets set JWT_SECRET="<secret>" AUTH_SERVICE_URL="https://banking-auth-service.fly.dev" ACCOUNT_SERVICE_URL="https://banking-account-service.fly.dev" TRANSFER_SERVICE_URL="https://banking-transfer-service.fly.dev" --app banking-api-gateway
-fly deploy --dockerfile ../../docker/Dockerfile.service --build-arg SERVICE=api-gateway
-```
-
-### Frontend (Vercel)
 ```bash
 cd apps/frontend
 npx vercel --prod
-# Set environment: VITE_API_URL=https://banking-api-gateway.fly.dev
 ```
 
-### Verify deployment
+### ✅ Automatic SPA Routing Support
+`apps/frontend/vercel.json` and root `vercel.json` are pre-configured with client-side rewrites:
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+Refreshing on routes like `/dashboard`, `/transfer`, `/rd`, or `/transactions` will never return 404.
+
+---
+
+## 🖥️ 2. Deploy Backend to Render
+
+Render offers two deployment options:
+
+---
+
+### Option A: 1-Click Render Blueprint (Automated Infrastructure)
+
+This uses the included [`render.yaml`](file:///c:/Banking-platform/render.yaml) file to automatically provision a free PostgreSQL database and the unified backend service.
+
+1. Push your repository to GitHub.
+2. Go to your [Render Dashboard](https://dashboard.render.com/).
+3. Click **"New +"** $\rightarrow$ **"Blueprint"**.
+4. Connect your GitHub repository.
+5. Render reads `render.yaml` and will provision:
+   - **`banking-db`**: PostgreSQL Database (Free Tier)
+   - **`banking-api-backend`**: Web Service running the API Gateway and internal microservices.
+6. Click **"Apply"** and wait for the build to complete.
+7. Copy the public Web Service URL (e.g. `https://banking-api-backend.onrender.com`).
+8. Paste that URL as `VITE_API_URL` in your Vercel frontend settings!
+
+---
+
+### Option B: Manual Web Service + PostgreSQL on Render
+
+If you prefer setting up manually without Blueprints:
+
+#### Step 1: Create PostgreSQL Database on Render
+1. In Render Dashboard, click **"New +"** $\rightarrow$ **"PostgreSQL"**.
+2. Name: `banking-db`
+3. Database: `banking_platform`
+4. User: `banking`
+5. Plan: **Free**
+6. Click **"Create Database"**.
+7. Once created, copy the **Internal Database URL** (or External if deploying outside Render).
+
+#### Step 2: Create Web Service on Render
+1. In Render Dashboard, click **"New +"** $\rightarrow$ **"Web Service"**.
+2. Connect your repository.
+3. Configure the service:
+   - **Name**: `banking-api-backend`
+   - **Language / Runtime**: `Node`
+   - **Region**: Same as database (e.g. Oregon or Frankfurt)
+   - **Branch**: `main`
+   - **Build Command**:
+     ```bash
+     npm install && npm run db:generate && npm run build
+     ```
+   - **Start Command**:
+     ```bash
+     npm start
+     ```
+   - **Plan**: **Free**
+4. Configure **Environment Variables**:
+   | Variable | Value | Notes |
+   |---|---|---|
+   | `NODE_ENV` | `production` | Production mode |
+   | `DATABASE_URL` | *Paste your Render PostgreSQL connection string* | Required |
+   | `JWT_SECRET` | *32+ character random string* | Auth signing |
+   | `JWT_REFRESH_SECRET` | *32+ character random string* | Token refresh |
+   | `INTERNAL_SERVICE_SECRET` | *random secret* | Internal auth |
+   | `CORS_ORIGIN` | `*` or your Vercel URL `https://your-app.vercel.app` | Cross-origin access |
+5. Click **"Create Web Service"**.
+6. The `scripts/start-render.js` orchestrator will automatically:
+   - Execute `prisma migrate deploy` to initialize all database tables.
+   - Start the internal Auth, Account, and Transfer services on internal ports.
+   - Bind the Fastify API Gateway to Render's public `$PORT`.
+   - Expose the `/health` endpoint for Render uptime monitoring.
+
+---
+
+## 🔄 3. Connecting Frontend and Backend
+
+Once both are deployed:
+
+1. Copy your Render backend URL:
+   `https://banking-api-backend.onrender.com`
+2. Go to **Vercel** $\rightarrow$ **Project Settings** $\rightarrow$ **Environment Variables**.
+3. Set:
+   ```env
+   VITE_API_URL=https://banking-api-backend.onrender.com
+   ```
+4. Trigger a **Redeploy** on Vercel so the frontend picks up the new environment variable.
+5. Open your Vercel URL in your browser:
+   - Register a new user (`POST /auth/register`)
+   - Create accounts, book Recurring Deposits, book Fixed Deposits, and send transfers!
+
+---
+
+## 🛠️ 4. Local Testing & Verification
+
+Before pushing to git, you can verify both builds locally:
+
 ```bash
-curl https://banking-api-gateway.fly.dev/health
-curl https://banking-api-gateway.fly.dev/ready
+# 1. Verify Prisma generation and monorepo build
+npm run db:generate
+npm run build
+
+# 2. Test the frontend production preview
+cd apps/frontend
+npm run preview
 ```
-
----
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `REDIS_URL` | Redis connection string | Yes |
-| `RABBITMQ_URL` | RabbitMQ AMQP URL | Yes |
-| `JWT_SECRET` | JWT signing secret (min 32 chars) | Yes |
-| `JWT_REFRESH_SECRET` | Refresh token secret | Yes |
-| `INTERNAL_SERVICE_SECRET` | Internal service auth token | Yes |
-| `CORS_ORIGIN` | Allowed CORS origin | Yes |
-| `NODE_ENV` | `production` or `development` | Yes |
-| `LOG_LEVEL` | `info`, `debug`, `error` | No |
-| `FAIL_ACCOUNT_SERVICE` | Fault injection (dev only) | No |
-| `FAIL_TRANSFER_SERVICE` | Fault injection (dev only) | No |
-| `ARTIFICIAL_LATENCY_MS` | Add latency in ms (dev only) | No |
-
----
-
-## Database Migrations
-
-```bash
-# Local
-npm run db:migrate
-
-# Production (run once after deploy)
-fly ssh console --app banking-auth-service -C "npx prisma migrate deploy"
-```
-
----
-
-## Known Limitations
-
-1. **Frontend UUID generation**: Uses custom implementation instead of crypto.randomUUID() for wider compatibility
-2. **Internal service communication**: Services communicate over HTTP — in production, consider mTLS or service mesh
-3. **RabbitMQ on Fly.io**: Requires persistent volume for message durability
-4. **No dead-letter queue**: Messages that fail > MAX_ATTEMPTS are dropped — add DLQ for production
-5. **OTP simulation**: OTP is not implemented — auth flow is password-only
-6. **No email notifications**: Notification worker logs only — connect to SendGrid/SES for production
-7. **Single PostgreSQL instance**: All schemas in one DB for simplicity — scale by separating per service
