@@ -11,7 +11,7 @@ COPY tsconfig.base.json ./
 
 ARG WORKER
 RUN npm install
-RUN npx prisma@5.22.0 generate
+RUN npx prisma@5.22.0 generate --schema=./prisma/schema.prisma
 RUN npm run build --workspace=packages/logger --if-present
 RUN npm run build --workspace=packages/contracts --if-present
 RUN npm run build --workspace=workers/${WORKER} --if-present
