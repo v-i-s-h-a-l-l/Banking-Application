@@ -2,18 +2,11 @@
 
 const DEFAULT_PROD_API = 'https://banking-application-pesy.onrender.com';
 
-const API_HOST = (() => {
-  const envUrl = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
-    ? String(import.meta.env.VITE_API_URL).trim().replace(/\/$/, '')
-    : '';
-  if (envUrl) return envUrl;
-  // If running in a browser on any deployed host (Vercel, custom domain, etc.), use the live Render backend
-  if (typeof window !== 'undefined' && window.location.hostname && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-    return DEFAULT_PROD_API;
-  }
-  return '';
-})();
+const API_HOST = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
+  ? String(import.meta.env.VITE_API_URL).trim().replace(/\/$/, '')
+  : '';
 
+// Default to same-origin '/api' (reverse-proxied by Vercel or Vite dev server)
 export const BASE_URL = API_HOST ? `${API_HOST}/api` : '/api';
 
 interface ApiOptions extends RequestInit {
@@ -51,13 +44,22 @@ async function refreshAccessToken(): Promise<boolean> {
     if (!token) return false;
 
     try {
-      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      let res: Response | null = await fetch(`${BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: token }),
+      }).catch(async () => {
+        if (!API_HOST && BASE_URL === '/api') {
+          return fetch(`${DEFAULT_PROD_API}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: token }),
+          }).catch(() => null);
+        }
+        return null;
       });
 
-      if (!res.ok) {
+      if (!res || !res.ok) {
         clearTokens();
         return false;
       }
@@ -101,12 +103,28 @@ async function request<T>(
       ...init,
       headers,
     });
-  } catch (netErr: any) {
-    throw {
-      error: {
-        message: netErr?.message ? `Network request failed: ${netErr.message}` : 'Network error. Please check your backend connection.',
-      },
-    };
+  } catch (primaryErr: any) {
+    // If same-origin '/api' failed, try direct Render backend fallback
+    if (!API_HOST && BASE_URL === '/api') {
+      try {
+        res = await fetch(`${DEFAULT_PROD_API}/api${path}`, {
+          ...init,
+          headers,
+        });
+      } catch (fallbackErr: any) {
+        throw {
+          error: {
+            message: fallbackErr?.message || primaryErr?.message || 'Network request failed. Please check your connection.',
+          },
+        };
+      }
+    } else {
+      throw {
+        error: {
+          message: primaryErr?.message ? `Network request failed: ${primaryErr.message}` : 'Network error. Please check your backend connection.',
+        },
+      };
+    }
   }
 
   // Auto-refresh on 401

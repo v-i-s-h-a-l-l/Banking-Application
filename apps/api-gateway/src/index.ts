@@ -49,7 +49,11 @@ const PUBLIC_ROUTES = new Set([
 async function buildApp() {
   const app = Fastify({ logger: false, genReqId: () => crypto.randomUUID() });
 
-  await app.register(helmet, { global: true });
+  await app.register(helmet, {
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false,
+    contentSecurityPolicy: false,
+  });
   await app.register(cors, {
     origin: (origin, cb) => {
       // Allow browser requests, server-to-server requests, curl, and Vercel frontends
