@@ -47,6 +47,10 @@ export default function RegisterPage() {
 
         <h1 className="auth-title">Create your account</h1>
         <p className="auth-subtitle">Start managing your finances securely</p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '3px 10px', borderRadius: '20px', marginBottom: '16px', border: '1px solid rgba(16, 185, 129, 0.25)', fontWeight: 600 }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }}></span>
+          Cloud Verified & Secure • v2.2
+        </div>
 
         <form onSubmit={handleSubmit}>
           {error && (

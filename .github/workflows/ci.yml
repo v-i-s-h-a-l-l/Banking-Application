@@ -1,0 +1,40 @@
+name: CI & Automated Quality Checks
+
+on:
+  push:
+    branches: [ "main", "feature/**", "fix/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-verify:
+    name: Run Automated Tests & Verify Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate Database Schemas & Prisma Client
+        run: npm run db:generate
+
+      - name: Execute Automated Unit Tests
+        run: npm test
+
+      - name: Build Core Contract Packages
+        run: npm run build:packages
+
+      - name: Test Frontend Production Build
+        run: npm run build --workspace=apps/frontend
+
+      - name: Success Summary
+        run: echo "🚀 All automated tests passed successfully! Frontend build is ready for automated deployment."

@@ -62,7 +62,26 @@ export default function Navbar() {
     <nav className="navbar">
       <NavLink to="/dashboard" className="navbar-brand">
         <div className="brand-logo">N</div>
-        NexBank
+        <span>NexBank</span>
+        <span
+          id="system-status-badge"
+          style={{
+            marginLeft: '8px',
+            fontSize: '0.7rem',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            background: 'rgba(16, 185, 129, 0.15)',
+            color: '#10b981',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }}></span>
+          Live v2.2
+        </span>
       </NavLink>
 
       <ul className="navbar-nav">
