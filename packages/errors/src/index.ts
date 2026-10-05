@@ -140,9 +140,11 @@ export function toHttpError(err: unknown): {
       details: err.details,
     };
   }
+  const realMessage = (err as Error)?.message || 'An unexpected error occurred';
   return {
     statusCode: 500,
     code: 'INTERNAL_ERROR',
-    message: 'An unexpected error occurred',
+    message: realMessage,
+    details: (err as any)?.meta || (err as any)?.code || undefined,
   };
 }
