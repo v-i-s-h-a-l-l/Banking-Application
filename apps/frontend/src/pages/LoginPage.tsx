@@ -19,7 +19,12 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err?.error?.message ?? 'Login failed. Please check your credentials.');
+      console.error('Login failed:', err);
+      const msg =
+        err?.error?.message ||
+        err?.message ||
+        (typeof err === 'string' ? err : 'Login failed. Please check your credentials.');
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

@@ -52,14 +52,8 @@ async function buildApp() {
   await app.register(helmet, { global: true });
   await app.register(cors, {
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (RAW_CORS_ORIGIN === '*' || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
-        return cb(null, true);
-      }
-      if (/\.vercel\.app$/.test(origin)) {
-        return cb(null, true);
-      }
-      return cb(new Error('Not allowed by CORS'), false);
+      // Allow browser requests, server-to-server requests, curl, and Vercel frontends
+      return cb(null, true);
     },
     credentials: true,
   });

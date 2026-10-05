@@ -23,7 +23,12 @@ export default function RegisterPage() {
       await register(form.email, form.password, form.firstName, form.lastName);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err?.error?.message ?? 'Registration failed. Please try again.');
+      console.error('Registration failed:', err);
+      const msg =
+        err?.error?.message ||
+        err?.message ||
+        (typeof err === 'string' ? err : 'Registration failed. Please try again.');
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

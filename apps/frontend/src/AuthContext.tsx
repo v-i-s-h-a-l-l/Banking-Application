@@ -51,12 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 2. Refresh with refreshToken if available
       if (refreshToken) {
         try {
-          const res = await fetch('/api/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken }),
-          });
-          const data = await res.json();
+          const data = await authApi.refresh(refreshToken);
           if (data.success && isMounted) {
             setTokens(data.data.accessToken, data.data.refreshToken);
             const meRes = await authApi.me();

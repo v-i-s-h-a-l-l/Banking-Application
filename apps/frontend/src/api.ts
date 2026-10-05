@@ -1,9 +1,20 @@
 // API client with auth token management
 
-const API_HOST = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
-  ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
-  : '';
-const BASE_URL = API_HOST ? `${API_HOST}/api` : '/api';
+const DEFAULT_PROD_API = 'https://banking-application-pesy.onrender.com';
+
+const API_HOST = (() => {
+  const envUrl = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
+    ? String(import.meta.env.VITE_API_URL).trim().replace(/\/$/, '')
+    : '';
+  if (envUrl) return envUrl;
+  // If running in a browser on any deployed host (Vercel, custom domain, etc.), use the live Render backend
+  if (typeof window !== 'undefined' && window.location.hostname && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    return DEFAULT_PROD_API;
+  }
+  return '';
+})();
+
+export const BASE_URL = API_HOST ? `${API_HOST}/api` : '/api';
 
 interface ApiOptions extends RequestInit {
   skipAuth?: boolean;
@@ -84,10 +95,19 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${_accessToken}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (netErr: any) {
+    throw {
+      error: {
+        message: netErr?.message ? `Network request failed: ${netErr.message}` : 'Network error. Please check your backend connection.',
+      },
+    };
+  }
 
   // Auto-refresh on 401
   if (res.status === 401 && !skipAuth) {
@@ -96,7 +116,7 @@ async function request<T>(
       headers['Authorization'] = `Bearer ${_accessToken}`;
       const retry = await fetch(`${BASE_URL}${path}`, { ...init, headers });
       if (!retry.ok) {
-        const err = await retry.json();
+        const err = await retry.json().catch(() => ({ error: { message: `Request failed with status ${retry.status}` } }));
         throw err;
       }
       return retry.json();
@@ -107,11 +127,31 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: 'Request failed' } }));
+    const err = await res.json().catch(async () => {
+      const text = await res.text().catch(() => '');
+      return {
+        error: {
+          message: text.slice(0, 150) || `Request failed with status ${res.status}`,
+        },
+      };
+    });
     throw err;
   }
 
-  return res.json();
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw {
+      error: {
+        message: 'Received invalid response from server. Please check the backend.',
+      },
+    };
+  }
 }
 
 // ── Auth API ────────────────────────────────────────────────
@@ -128,6 +168,13 @@ export const authApi = {
     request<any>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, firstName, lastName }),
+      skipAuth: true,
+    }),
+
+  refresh: (refreshToken: string) =>
+    request<any>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
       skipAuth: true,
     }),
 
