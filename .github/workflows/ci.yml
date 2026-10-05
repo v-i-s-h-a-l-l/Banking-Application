@@ -27,11 +27,11 @@ jobs:
       - name: Generate Database Schemas & Prisma Client
         run: npm run db:generate
 
-      - name: Execute Automated Unit Tests
-        run: npm test
-
       - name: Build Core Contract Packages
         run: npm run build:packages
+
+      - name: Execute Automated Unit Tests
+        run: npm test
 
       - name: Test Frontend Production Build
         run: npm run build --workspace=apps/frontend

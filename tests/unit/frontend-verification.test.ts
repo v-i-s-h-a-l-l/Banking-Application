@@ -1,17 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 describe('Frontend & Client Logic Verification', () => {
-  it('formats currency correctly into INR representations', () => {
-    const formatINR = (paise: number) => {
-      const rupees = paise / 100;
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-      }).format(rupees);
-    };
+  it('formats currency correctly into rupee representations', () => {
+    const formatPaiseToRupees = (paise: number) => `₹${(paise / 100).toFixed(2)}`;
 
-    expect(formatINR(100000)).toContain('1,000');
-    expect(formatINR(5000)).toContain('50');
+    expect(formatPaiseToRupees(100000)).toBe('₹1000.00');
+    expect(formatPaiseToRupees(5000)).toBe('₹50.00');
   });
 
   it('validates registration credentials correctly', () => {
