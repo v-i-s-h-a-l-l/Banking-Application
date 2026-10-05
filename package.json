@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build:packages": "npm run build --workspace=packages/contracts --workspace=packages/errors --workspace=packages/logger",
-    "build": "npm run build:packages && npm run build --workspaces --if-present",
+    "build": "npm run db:generate && npm run build:packages && npm run build --workspaces --if-present",
     "start": "node scripts/start-render.js",
     "start:render": "node scripts/start-render.js",
     "clean": "node -e \"['apps','packages','workers'].forEach(p=>{const fs=require('fs'),path=require('path');if(!fs.existsSync(p))return;fs.readdirSync(p).forEach(sub=>{const d=path.join(p,sub,'dist');if(fs.existsSync(d))fs.rmSync(d,{recursive:true,force:true});const t=path.join(p,sub,'tsconfig.tsbuildinfo');if(fs.existsSync(t))fs.rmSync(t,{force:true});});});console.log('Cleaned build artifacts');\"",

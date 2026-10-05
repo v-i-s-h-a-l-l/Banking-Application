@@ -21,27 +21,45 @@ const rootDir = path.resolve(__dirname, '..');
 
 console.log('🚀 [Render Orchestrator] Initializing Banking Platform backend...');
 
-// 1. Run Database Migrations if DATABASE_URL is provided
+// Normalize DATABASE_URL protocol if needed
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres://')) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL.replace('postgres://', 'postgresql://');
+}
+
+// 1. Always generate Prisma client on startup to ensure node_modules/@prisma/client is up to date
+console.log('📦 [Render Orchestrator] Generating Prisma client...');
+try {
+  execSync('npx prisma generate --schema=./prisma/schema.prisma', {
+    cwd: rootDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  console.log('✅ [Render Orchestrator] Prisma client generated.');
+} catch (err) {
+  console.warn('⚠️ [Render Orchestrator] Prisma generate notice:', err.message);
+}
+
+// 2. Synchronize database tables if DATABASE_URL is provided
 if (process.env.DATABASE_URL) {
-  console.log('📦 [Render Orchestrator] Running Prisma database migrations...');
+  console.log('📦 [Render Orchestrator] Synchronizing PostgreSQL database schemas and tables...');
   try {
-    execSync('npx prisma migrate deploy --schema=./prisma/schema.prisma', {
+    execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
       cwd: rootDir,
       stdio: 'inherit',
       env: process.env,
     });
-    console.log('✅ [Render Orchestrator] Database migrations applied successfully.');
+    console.log('✅ [Render Orchestrator] Database schemas & tables synchronized successfully.');
   } catch (err) {
-    console.warn('⚠️ [Render Orchestrator] Migration deploy notice: Continuing with schema push fallback if needed...');
+    console.warn('⚠️ [Render Orchestrator] db push notice, trying migrate deploy fallback:', err.message);
     try {
-      execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
+      execSync('npx prisma migrate deploy --schema=./prisma/schema.prisma', {
         cwd: rootDir,
         stdio: 'inherit',
         env: process.env,
       });
-      console.log('✅ [Render Orchestrator] Database schema synchronized.');
+      console.log('✅ [Render Orchestrator] Database migrations deployed.');
     } catch (e) {
-      console.error('❌ [Render Orchestrator] Database synchronization failed:', e.message);
+      console.error('❌ [Render Orchestrator] Database initialization error:', e.message);
     }
   }
 } else {
