@@ -187,19 +187,21 @@ export default function RecurringDepositPage() {
     }
 
     setIsCreating(true);
+    const installmentMinor = Math.round(monthlyAmount * 100);
 
     try {
       // Deduct first installment immediately
-      await transferApi.create(
+      await accountApi.debit(
         selectedAccount,
-        selectedAccount, // self-transfer to simulate RD deduction — in a real system this goes to a RD account
-        Math.round(monthlyAmount * 100),
-        `RD Installment — Month 1 of ${selectedPlan.months}`,
-        uuidv4(),
+        installmentMinor,
+        `Recurring Deposit Installment — Month 1 of ${selectedPlan.months}`,
       );
+      const accData = await accountApi.list();
+      setAccounts(accData.data.accounts ?? []);
     } catch (err: any) {
-      // If self-transfer is rejected, we'll proceed anyway (demo mode)
-      // In real banking, this would go to a separate RD vault account
+      setIsCreating(false);
+      toast.error(err?.error?.message || 'Failed to debit account for RD installment');
+      return;
     }
 
     const now = new Date();
@@ -224,17 +226,34 @@ export default function RecurringDepositPage() {
     saveRDs(updated);
     setIsCreating(false);
 
-    toast.success(`RD created! ₹${formatCurrency(monthlyAmount)}/month for ${selectedPlan.label}`);
+    toast.success(`RD created! ₹${formatCurrency(monthlyAmount)}/month for ${selectedPlan.label}. Balance updated.`);
   };
 
-  const handleClose = (id: string) => {
+  const handleClose = async (id: string) => {
     setClosingId(id);
+    const rd = rds.find((r) => r.id === id);
+    if (rd && rd.status === 'ACTIVE') {
+      try {
+        const currentValue = calcMaturity(rd.monthlyAmount, rd.totalPaid, rd.annualRate).maturity;
+        const creditMinor = Math.round(currentValue * 100);
+        await accountApi.credit(
+          rd.accountId,
+          creditMinor,
+          `Recurring Deposit Closure — ${rd.totalPaid} instalments`,
+        );
+        const accData = await accountApi.list();
+        setAccounts(accData.data.accounts ?? []);
+      } catch (err: any) {
+        console.error('Failed to credit closed RD amount:', err);
+      }
+    }
+
     setTimeout(() => {
-      const updated = rds.map((r) => r.id === id ? { ...r, status: 'CLOSED' as const } : r);
+      const updated = rds.map((r) => (r.id === id ? { ...r, status: 'CLOSED' as const } : r));
       setRds(updated);
       saveRDs(updated);
       setClosingId(null);
-      toast('RD closed. Funds will be returned to your account.', { icon: '💰' });
+      toast.success('RD closed. Funds credited back to your account!', { icon: '💰' });
     }, 800);
   };
 

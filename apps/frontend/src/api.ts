@@ -226,6 +226,18 @@ export const accountApi = {
 
   ledger: (id: string, page = 1, limit = 20) =>
     request<any>(`/accounts/${id}/ledger?page=${page}&limit=${limit}`),
+
+  debit: (id: string, amountMinor: number, description?: string) =>
+    request<any>(`/accounts/${id}/debit`, {
+      method: 'POST',
+      body: JSON.stringify({ amountMinor, description }),
+    }),
+
+  credit: (id: string, amountMinor: number, description?: string) =>
+    request<any>(`/accounts/${id}/credit`, {
+      method: 'POST',
+      body: JSON.stringify({ amountMinor, description }),
+    }),
 };
 
 // ── Transfer API ─────────────────────────────────────────────

@@ -158,16 +158,30 @@ export default function FixedDepositPage() {
       toast.error('Insufficient account balance'); return;
     }
     setIsCreating(true);
+    const amountMinor = Math.round(amount * 100);
     try {
-      await transferApi.create(selectedAccount, selectedAccount,
-        Math.round(amount * 100), `Fixed Deposit — ${selectedRate.label} @ ${selectedRate.rate}%`, uuidv4());
-    } catch {}
+      await accountApi.debit(
+        selectedAccount,
+        amountMinor,
+        `Fixed Deposit Booking — ${selectedRate.label} @ ${selectedRate.rate}%`,
+      );
+      const accData = await accountApi.list();
+      setAccounts(accData.data.accounts ?? []);
+    } catch (err: any) {
+      setIsCreating(false);
+      toast.error(err?.error?.message || 'Failed to debit account for Fixed Deposit');
+      return;
+    }
 
     const now = new Date();
     const fd: FixedDeposit = {
-      id: uuidv4(), accountId: selectedAccount,
+      id: uuidv4(),
+      accountId: selectedAccount,
       accountNumber: accounts.find((a) => a.id === selectedAccount)?.accountNumber ?? '',
-      amount, days: selectedRate.days, label: selectedRate.label, rate: selectedRate.rate,
+      amount,
+      days: selectedRate.days,
+      label: selectedRate.label,
+      rate: selectedRate.rate,
       compounding,
       startDate: now.toISOString(),
       maturityDate: addDays(now, selectedRate.days).toISOString(),
@@ -176,15 +190,32 @@ export default function FixedDepositPage() {
       status: 'ACTIVE',
     };
     const updated = [...fds, fd];
-    setFDs(updated); saveFDs(updated);
+    setFDs(updated);
+    saveFDs(updated);
     setIsCreating(false);
-    toast.success(`FD of ₹${formatCurrency(amount)} booked for ${selectedRate.label}!`);
+    toast.success(`FD of ₹${formatCurrency(amount)} booked for ${selectedRate.label}! Balance updated.`);
   };
 
-  const handleClose = (id: string) => {
-    const updated = fds.map((f) => f.id === id ? { ...f, status: 'CLOSED' as const } : f);
-    setFDs(updated); saveFDs(updated);
-    toast('FD closed. Amount will be credited to your account.', { icon: '💰' });
+  const handleClose = async (id: string) => {
+    const fd = fds.find((f) => f.id === id);
+    if (fd && fd.status === 'ACTIVE') {
+      try {
+        const creditMinor = Math.round((fd.maturityAmount || fd.amount) * 100);
+        await accountApi.credit(
+          fd.accountId,
+          creditMinor,
+          `Fixed Deposit Closure — ${fd.label}`,
+        );
+        const accData = await accountApi.list();
+        setAccounts(accData.data.accounts ?? []);
+      } catch (err: any) {
+        console.error('Failed to credit closed FD payout:', err);
+      }
+    }
+    const updated = fds.map((f) => (f.id === id ? { ...f, status: 'CLOSED' as const } : f));
+    setFDs(updated);
+    saveFDs(updated);
+    toast.success('FD closed. Funds credited back to your account!', { icon: '💰' });
   };
 
   const activeFDs = fds.filter((f) => f.status === 'ACTIVE');

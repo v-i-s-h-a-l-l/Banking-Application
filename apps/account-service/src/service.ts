@@ -128,12 +128,12 @@ export async function getUserAccounts(userId: string): Promise<Record<string, un
 export async function debitAccount(
   accountId: string,
   amountMinor: bigint,
-  transferId: string,
+  transferId: string | null = null,
   description: string,
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx: any) => {
+  return await prisma.$transaction(async (tx: any) => {
     // Row-level lock
     const accounts = await tx.$queryRaw<Array<{
       id: string;
@@ -171,7 +171,7 @@ export async function debitAccount(
         entryType: 'DEBIT',
         amountMinor,
         balanceAfter: newBalance,
-        transferId,
+        transferId: transferId ?? null,
         description,
       },
     });
@@ -180,6 +180,21 @@ export async function debitAccount(
       { accountId, transferId, amountMinor: amountMinor.toString(), newBalance: newBalance.toString() },
       'Account debited',
     );
+
+    const updated = await tx.account.findUnique({
+      where: { id: accountId },
+      select: {
+        id: true,
+        userId: true,
+        accountNumber: true,
+        accountType: true,
+        status: true,
+        balanceMinor: true,
+        currency: true,
+        createdAt: true,
+      },
+    });
+    return serializeAccount(updated!);
   });
 }
 
@@ -190,12 +205,12 @@ export async function debitAccount(
 export async function creditAccount(
   accountId: string,
   amountMinor: bigint,
-  transferId: string,
+  transferId: string | null = null,
   description: string,
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx: any) => {
+  return await prisma.$transaction(async (tx: any) => {
     const accounts = await tx.$queryRaw<Array<{
       id: string;
       balance_minor: bigint;
@@ -226,7 +241,7 @@ export async function creditAccount(
         entryType: 'CREDIT',
         amountMinor,
         balanceAfter: newBalance,
-        transferId,
+        transferId: transferId ?? null,
         description,
       },
     });
@@ -235,6 +250,21 @@ export async function creditAccount(
       { accountId, transferId, amountMinor: amountMinor.toString(), newBalance: newBalance.toString() },
       'Account credited',
     );
+
+    const updated = await tx.account.findUnique({
+      where: { id: accountId },
+      select: {
+        id: true,
+        userId: true,
+        accountNumber: true,
+        accountType: true,
+        status: true,
+        balanceMinor: true,
+        currency: true,
+        createdAt: true,
+      },
+    });
+    return serializeAccount(updated!);
   });
 }
 

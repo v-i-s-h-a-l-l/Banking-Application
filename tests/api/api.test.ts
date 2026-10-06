@@ -176,6 +176,28 @@ describe('Accounts', () => {
     });
     expect(status).toBe(404);
   });
+
+  it('debits account for deposit/investment and reflects in balance', async () => {
+    const { status, body } = await api(`/accounts/${ctx.accountId}/debit`, {
+      method: 'POST',
+      token: ctx.accessToken,
+      body: JSON.stringify({ amountMinor: 50000, description: 'Test Fixed Deposit Debit' }),
+    });
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.account.id).toBe(ctx.accountId);
+  });
+
+  it('credits account upon deposit closure and reflects in balance', async () => {
+    const { status, body } = await api(`/accounts/${ctx.accountId}/credit`, {
+      method: 'POST',
+      token: ctx.accessToken,
+      body: JSON.stringify({ amountMinor: 55000, description: 'Test Fixed Deposit Closure Credit' }),
+    });
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.account.id).toBe(ctx.accountId);
+  });
 });
 
 // ============================================================

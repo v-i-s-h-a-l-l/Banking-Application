@@ -314,9 +314,17 @@ export default function SavingsGoalsPage() {
     if (!g) return;
 
     try {
-      await transferApi.create(g.accountId, g.accountId, Math.round(amount * 100),
-        `Savings Goal — ${g.name}`, uuidv4());
-    } catch {}
+      await accountApi.debit(
+        g.accountId,
+        Math.round(amount * 100),
+        `Savings Goal Contribution — ${g.name}`,
+      );
+      const accData = await accountApi.list();
+      setAccounts(accData.data.accounts ?? []);
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to deduct contribution from account');
+      return;
+    }
 
     const newSaved = g.savedAmount + amount;
     const isComplete = newSaved >= g.targetAmount;

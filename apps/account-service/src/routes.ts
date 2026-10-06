@@ -103,6 +103,52 @@ export async function accountRoutes(app: FastifyInstance) {
     },
   );
 
+  // POST /accounts/:id/debit — user debiting their own account (e.g. FD, RD, savings goals)
+  app.post(
+    '/accounts/:id/debit',
+    { preHandler: [jwtVerify as any] },
+    async (req, reply) => {
+      const { sub: userId } = req.user as { sub: string };
+      const { id } = req.params as { id: string };
+      const body = req.body as { amountMinor?: number | string; description?: string };
+      if (!body?.amountMinor || BigInt(body.amountMinor) <= 0n) {
+        throw new ValidationError('Amount must be positive');
+      }
+      // Check ownership
+      await getAccount(id, userId);
+      const account = await debitAccount(
+        id,
+        BigInt(body.amountMinor),
+        null,
+        body.description || 'Account Debit',
+      );
+      reply.send({ success: true, data: { account } });
+    },
+  );
+
+  // POST /accounts/:id/credit — user crediting their own account (e.g. FD / RD closure, payouts)
+  app.post(
+    '/accounts/:id/credit',
+    { preHandler: [jwtVerify as any] },
+    async (req, reply) => {
+      const { sub: userId } = req.user as { sub: string };
+      const { id } = req.params as { id: string };
+      const body = req.body as { amountMinor?: number | string; description?: string };
+      if (!body?.amountMinor || BigInt(body.amountMinor) <= 0n) {
+        throw new ValidationError('Amount must be positive');
+      }
+      // Check ownership
+      await getAccount(id, userId);
+      const account = await creditAccount(
+        id,
+        BigInt(body.amountMinor),
+        null,
+        body.description || 'Account Credit',
+      );
+      reply.send({ success: true, data: { account } });
+    },
+  );
+
   // ── Internal endpoints (called by Transfer Service) ──────────────────
 
   // POST /internal/accounts/:id/debit
