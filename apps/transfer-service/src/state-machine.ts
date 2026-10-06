@@ -30,7 +30,7 @@ export async function transitionTransfer(
     const transfers = await tx.$queryRaw<Array<{ id: string; status: TransferStatus }>>`
       SELECT id, status
       FROM transfers.transfers
-      WHERE id = ${transferId}::uuid
+      WHERE id::text = ${transferId}::text
       FOR UPDATE
     `;
 

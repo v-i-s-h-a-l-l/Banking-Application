@@ -15,9 +15,18 @@
 import { spawn, execSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
+
+// Load .env if present in local development
+try {
+  const envPath = path.resolve(rootDir, '.env');
+  if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(envPath);
+  }
+} catch {}
 
 console.log('🚀 [Render Orchestrator] Initializing Banking Platform backend...');
 

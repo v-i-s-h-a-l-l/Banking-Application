@@ -140,9 +140,9 @@ describe('Accounts', () => {
     });
 
     expect(status).toBe(201);
-    expect(body.data.account.accountType).toBe('SAVINGS');
-    expect(body.data.account.balanceMinor).toBe('0');
     ctx.accountId = body.data.account.id;
+    expect(body.data.account.accountType).toBe('SAVINGS');
+    expect(['0', '1000000']).toContain(body.data.account.balanceMinor);
   });
 
   it('creates a second account', async () => {

@@ -142,7 +142,7 @@ export async function debitAccount(
     }>>`
       SELECT id, balance_minor, status
       FROM accounts.accounts
-      WHERE id = ${accountId}::uuid
+      WHERE id::text = ${accountId}::text
       FOR UPDATE
     `;
 
@@ -161,7 +161,7 @@ export async function debitAccount(
     await tx.$executeRaw`
       UPDATE accounts.accounts
       SET balance_minor = ${newBalance}, updated_at = NOW()
-      WHERE id = ${accountId}::uuid
+      WHERE id::text = ${accountId}::text
     `;
 
     // Immutable ledger entry
@@ -203,7 +203,7 @@ export async function creditAccount(
     }>>`
       SELECT id, balance_minor, status
       FROM accounts.accounts
-      WHERE id = ${accountId}::uuid
+      WHERE id::text = ${accountId}::text
       FOR UPDATE
     `;
 
@@ -217,7 +217,7 @@ export async function creditAccount(
     await tx.$executeRaw`
       UPDATE accounts.accounts
       SET balance_minor = ${newBalance}, updated_at = NOW()
-      WHERE id = ${accountId}::uuid
+      WHERE id::text = ${accountId}::text
     `;
 
     await tx.ledgerEntry.create({
